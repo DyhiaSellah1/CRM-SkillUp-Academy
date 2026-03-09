@@ -1,19 +1,41 @@
-// backend/src/mail/mailService.js
-const SibApiV3Sdk = require('@getbrevo/brevo');
+const brevo = require('@getbrevo/brevo');
+require('dotenv').config();
 
-// On prépare la structure, la clé sera ajoutée plus tard dans le .env
-const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+async function sendEmail(to, subject, htmlContent) {
+   console.log('sendEmail');
+  try {
 
-const sendWelcomeEmail = async (contactEmail, contactName) => {
-  // Cette fonction sera appelée quand un nouveau prospect est créé
-  console.log(`Préparation de l'envoi du mail à ${contactEmail}`);
+    const apiInstance = new brevo.TransactionalEmailsApi();
 
-  // Logique Brevo à activer une fois le compte validé
-  /*
-  let sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-  sendSmtpEmail.templateId = 1; // ID du modèle que tu créeras sur Brevo
-  sendSmtpEmail.to = [{ "email": contactEmail, "name": contactName }];
-  */
-};
+    apiInstance.setApiKey(
+      brevo.TransactionalEmailsApiApiKeys.apiKey,
+      process.env.BREVO_API_KEY
+    );
 
-module.exports = { sendWelcomeEmail };
+    const sendSmtpEmail = new brevo.SendSmtpEmail();
+
+    sendSmtpEmail.subject = subject;
+    sendSmtpEmail.htmlContent = htmlContent;
+
+    sendSmtpEmail.sender = {
+      name: process.env.BREVO_SENDER_NAME,
+      email: process.env.BREVO_SENDER_EMAIL
+    };
+
+    sendSmtpEmail.to = [
+      { email: to }
+    ];
+
+    const data = await apiInstance.sendTransacEmail(sendSmtpEmail);
+
+    console.log("Email envoyé :", data);
+
+  } catch (error) {
+
+    console.error("Erreur Brevo :", error.message);
+
+  }
+
+}
+
+module.exports = { sendEmail };

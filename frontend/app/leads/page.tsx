@@ -14,16 +14,22 @@ export default function LeadsPage() {
   });
 
   async function loadData() {
-    const [leadsRes, contactsRes] = await Promise.all([
-      fetch("http://localhost:3001/api/leads"),
-      fetch("http://localhost:3001/api/contacts"),
-    ]);
+    try {
+      const [leadsRes, contactsRes] = await Promise.all([
+        fetch("http://localhost:3001/api/leads"),
+        fetch("http://localhost:3001/api/contacts"),
+      ]);
 
-    const leadsData = await leadsRes.json();
-    const contactsData = await contactsRes.json();
+      const leadsData = await leadsRes.json();
+      const contactsData = await contactsRes.json();
 
-    setLeads(Array.isArray(leadsData) ? leadsData : []);
-    setContacts(Array.isArray(contactsData) ? contactsData : []);
+      setLeads(Array.isArray(leadsData) ? leadsData : []);
+      setContacts(Array.isArray(contactsData) ? contactsData : []);
+    } catch (error) {
+      console.error("Erreur chargement leads/contacts :", error);
+      setLeads([]);
+      setContacts([]);
+    }
   }
 
   useEffect(() => {
@@ -33,27 +39,36 @@ export default function LeadsPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    await fetch("http://localhost:3001/api/leads", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        ...form,
-        amount: Number(form.amount),
-        contact_id: Number(form.contact_id),
-      }),
-    });
+    try {
+      const res = await fetch("http://localhost:3001/api/leads", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...form,
+          amount: Number(form.amount),
+          contact_id: Number(form.contact_id),
+        }),
+      });
 
-    setForm({
-      title: "",
-      amount: "",
-      contact_id: "",
-      status: "nouveau",
-      source: "",
-    });
+      if (!res.ok) {
+        console.error("Erreur création lead :", res.status);
+        return;
+      }
 
-    loadData();
+      setForm({
+        title: "",
+        amount: "",
+        contact_id: "",
+        status: "nouveau",
+        source: "",
+      });
+
+      loadData();
+    } catch (error) {
+      console.error("Erreur soumission lead :", error);
+    }
   }
 
   return (
@@ -133,6 +148,7 @@ export default function LeadsPage() {
             <p>
               Contact : {lead.first_name ? `${lead.first_name} ${lead.last_name}` : "—"}
             </p>
+            <p>Étape : {lead.stage_label || "—"}</p>
           </div>
         ))}
       </div>

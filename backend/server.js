@@ -2,6 +2,7 @@ const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
 require('dotenv').config();
+const { sendEmail } = require('./src/mail/mailservice');
 
 console.log("Ma DB URL est :", process.env.DATABASE_URL ? "Chargée ✅" : "Vide ❌");
 
@@ -113,10 +114,14 @@ app.get('/api/leads', async (req, res) => {
       LEFT JOIN pipeline_stages ps ON l.stage_id = ps.id
       ORDER BY l.created_at DESC
     `);
+
     res.json(result.rows);
   } catch (err) {
     console.error("Erreur récupération leads :", err.message);
-    res.status(500).json({ error: "Erreur lors de la récupération des leads", details: err.message });
+    res.status(500).json({
+      error: "Erreur lors de la récupération des leads",
+      details: err.message
+    });
   }
 });
 
@@ -124,7 +129,9 @@ app.post('/api/leads', async (req, res) => {
   const { title, amount, contact_id, stage_id, status, source } = req.body;
 
   if (!title || !contact_id) {
-    return res.status(400).json({ error: "Les champs title et contact_id sont obligatoires" });
+    return res.status(400).json({
+      error: "Les champs title et contact_id sont obligatoires"
+    });
   }
 
   try {
@@ -141,10 +148,25 @@ app.post('/api/leads', async (req, res) => {
         source || null
       ]
     );
+
+    // Brevo peut être remis plus tard si besoin
+await sendEmail(
+  "dihiasellah1@gmail.com",
+  "Nouveau lead créé",
+  `<h2>Nouveau lead</h2>
+   <p>Un nouveau lead a été créé dans SkillUp CRM.</p>
+   <p><b>Titre :</b> ${title}</p>
+   <p><b>Montant :</b> ${amount} €</p>
+   <p><b>Source :</b> ${source || "Non renseignée"}</p>`
+);
+
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error("Erreur création lead :", err.message);
-    res.status(500).json({ error: "Erreur lors de la création du lead", details: err.message });
+    res.status(500).json({
+      error: "Erreur lors de la création du lead",
+      details: err.message
+    });
   }
 });
 
@@ -211,7 +233,6 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
-/* Alias utile pour le dashboard frontend */
 app.get('/api/dashboard/stats', async (req, res) => {
   try {
     const [leads, revenue, contacts, tasks] = await Promise.all([
@@ -232,6 +253,7 @@ app.get('/api/dashboard/stats', async (req, res) => {
     res.status(500).json({ error: "Erreur lors du calcul des statistiques", details: err.message });
   }
 });
+
 /* =========================
    7. UTILISATEURS
 ========================= */
@@ -320,6 +342,26 @@ app.post('/api/pipeline-stages', async (req, res) => {
       details: err.message
     });
   }
+});
+
+app.get('/api/test-email', async (req, res) => {
+
+  try {
+
+    await sendEmail(
+      "dihiasellah1@gmail.com",
+      "Test Brevo SkillUp CRM",
+      "<h2>Email test</h2><p>Brevo fonctionne correctement.</p>"
+    );
+
+    res.json({ message: "Email envoyé" });
+
+  } catch (error) {
+
+    res.status(500).json({ error: "Erreur envoi email" });
+
+  }
+
 });
 
 const PORT = process.env.PORT || 3001;
