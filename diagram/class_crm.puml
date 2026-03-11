@@ -1,0 +1,59 @@
+@startuml
+
+class User {
+  +id: int
+  +full_name: string
+  +email: string
+  +password: string
+  +role: string
+  +created_at: datetime
+}
+
+class Company {
+  +id: int
+  +name: string
+  +industry: string
+  +city: string
+  +created_at: datetime
+}
+
+class Contact {
+  +id: int
+  +first_name: string
+  +last_name: string
+  +email: string
+  +company_id: int
+  +created_at: datetime
+}
+
+class Lead {
+  +id: int
+  +title: string
+  +amount: decimal
+  +status: string
+  +source: string
+  +contact_id: int
+  +stage_id: int
+  +created_at: datetime
+}
+
+class Task {
+  +id: int
+  +lead_id: int
+  +title: string
+  +due_date: datetime
+  +is_completed: boolean
+}
+
+class PipelineStage {
+  +id: int
+  +label: string
+  +order_index: int
+}
+
+Company "1" -- "0..*" Contact : possède
+Contact "1" -- "0..*" Lead : génère
+Lead "1" -- "0..*" Task : contient
+PipelineStage "1" -- "0..*" Lead : étape
+
+@enduml

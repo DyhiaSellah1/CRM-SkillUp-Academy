@@ -1,29 +1,36 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_BASE = "http://localhost:3001/api";
 
-export async function fetchData(endpoint: string) {
-  const res = await fetch(`${API_URL}${endpoint}`, {
+export async function getDashboardStats() {
+  const res = await fetch(`${API_BASE}/dashboard/stats`, {
     cache: "no-store",
   });
 
   if (!res.ok) {
-    throw new Error(`Erreur API : ${res.status}`);
+    throw new Error("Erreur récupération dashboard");
   }
 
   return res.json();
 }
 
-export async function postData(endpoint: string, body: any) {
-  const res = await fetch(`${API_URL}${endpoint}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
+export async function getStatsDetails() {
+  const res = await fetch(`${API_BASE}/stats/details`, {
+    cache: "no-store",
   });
 
   if (!res.ok) {
-    const error = await res.json().catch(() => ({}));
-    throw new Error(error.error || `Erreur API : ${res.status}`);
+    throw new Error("Erreur récupération statistiques détaillées");
+  }
+
+  return res.json();
+}
+
+export async function getPipelineBoard() {
+  const res = await fetch(`${API_BASE}/pipeline-board`, {
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    throw new Error("Erreur récupération pipeline");
   }
 
   return res.json();

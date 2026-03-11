@@ -3,7 +3,8 @@ const { Pool } = require('pg');
 const cors = require('cors');
 require('dotenv').config();
 const { sendEmail } = require('./src/mail/mailservice');
-
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 console.log("Ma DB URL est :", process.env.DATABASE_URL ? "Chargée ✅" : "Vide ❌");
 
 const app = express();
@@ -47,7 +48,8 @@ app.get('/api/contacts', async (req, res) => {
 
 app.post('/api/contacts', async (req, res) => {
   const { first_name, last_name, email, company_id } = req.body;
-
+   // console.log("contact");
+    //console.log(req);
   if (!first_name || !last_name || !email) {
     return res.status(400).json({ error: "Tous les champs sont obligatoires" });
   }
@@ -235,22 +237,29 @@ app.get('/api/stats', async (req, res) => {
 
 app.get('/api/dashboard/stats', async (req, res) => {
   try {
-    const [leads, revenue, contacts, tasks] = await Promise.all([
+    const [leads, revenue, contacts, tasks, converted, lost] = await Promise.all([
       pool.query('SELECT COUNT(*) FROM leads'),
-      pool.query('SELECT SUM(amount) FROM leads'),
+      pool.query('SELECT COALESCE(SUM(amount), 0) AS total FROM leads'),
       pool.query('SELECT COUNT(*) FROM contacts'),
-      pool.query('SELECT COUNT(*) FROM tasks')
+      pool.query('SELECT COUNT(*) FROM tasks'),
+      pool.query("SELECT COUNT(*) FROM leads WHERE status = 'converti'"),
+      pool.query("SELECT COUNT(*) FROM leads WHERE status = 'perdu'")
     ]);
 
     res.json({
       leads: parseInt(leads.rows[0].count),
-      revenue: parseFloat(revenue.rows[0].sum || 0),
+      revenue: parseFloat(revenue.rows[0].total),
       contacts: parseInt(contacts.rows[0].count),
-      tasks: parseInt(tasks.rows[0].count)
+      tasks: parseInt(tasks.rows[0].count),
+      converted: parseInt(converted.rows[0].count),
+      lost: parseInt(lost.rows[0].count)
     });
   } catch (err) {
     console.error("Erreur dashboard stats :", err.message);
-    res.status(500).json({ error: "Erreur lors du calcul des statistiques", details: err.message });
+    res.status(500).json({
+      error: "Erreur lors du calcul des statistiques",
+      details: err.message
+    });
   }
 });
 
@@ -271,22 +280,23 @@ app.get('/api/users', async (req, res) => {
     });
   }
 });
-
 app.post('/api/users', async (req, res) => {
   const { full_name, email, password, role } = req.body;
 
-  if (!full_name || !email || !role) {
+  if (!full_name || !email || !password || !role) {
     return res.status(400).json({
-      error: "Les champs full_name, email et role sont obligatoires"
+      error: "Les champs full_name, email, password et role sont obligatoires"
     });
   }
 
   try {
+    const hashedPassword = await bcrypt.hash(password.trim(), 10);
+
     const result = await pool.query(
       `INSERT INTO users (full_name, email, password, role)
        VALUES ($1, $2, $3, $4)
        RETURNING id, full_name, email, role, created_at`,
-      [full_name, email, password || null, role]
+      [full_name.trim(), email.trim(), hashedPassword, role]
     );
 
     res.status(201).json(result.rows[0]);
@@ -344,8 +354,8 @@ app.post('/api/pipeline-stages', async (req, res) => {
   }
 });
 
-app.get('/api/test-email', async (req, res) => {
 
+app.get('/api/test-email', async (req, res) => {
   try {
 
     await sendEmail(
@@ -364,7 +374,339 @@ app.get('/api/test-email', async (req, res) => {
 
 });
 
+app.post('/api/register', async (req, res) => {
+  const { full_name, email, password } = req.body;
+
+  if (!full_name || !email || !password) {
+    return res.status(400).json({
+      error: "Tous les champs sont obligatoires"
+    });
+  }
+
+  try {
+    const trimmedFullName = full_name.trim();
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+
+    const existingUser = await pool.query(
+      'SELECT id FROM users WHERE email = $1',
+      [trimmedEmail]
+    );
+
+    if (existingUser.rows.length > 0) {
+      return res.status(409).json({
+        error: "Cet email existe déjà"
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(trimmedPassword, 10);
+
+    const result = await pool.query(
+      `INSERT INTO users (full_name, email, password, role)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, full_name, email, role, created_at`,
+      [trimmedFullName, trimmedEmail, hashedPassword, 'user']
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error("Erreur inscription :", err.message);
+    res.status(500).json({
+      error: "Erreur lors de l'inscription",
+      details: err.message
+    });
+  }
+});
+
+/*app.post('/api/register', async (req, res) => {
+  console.log("BODY RECU /api/register :", req.body);
+
+  const { full_name, email, password } = req.body;
+
+  // Trim the values before checking
+  const trimmedFullName = full_name.trim();
+  const trimmedEmail = email.trim();
+  const trimmedPassword = password.trim();
+
+  if (!trimmedFullName || !trimmedEmail || !trimmedPassword) {
+    return res.status(400).json({
+      error: "Tous les champs sont obligatoires"
+    });
+  }
+
+  try {
+    const existingUser = await pool.query(
+      'SELECT id FROM users WHERE email = $1',
+      [email]
+    );
+
+    if (existingUser.rows.length > 0) {
+      return res.status(409).json({
+        error: "Cet email existe déjà"
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const result = await pool.query(
+      `INSERT INTO users (full_name, email, password, role)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, full_name, email, role, created_at`,
+      [trimmedFullName, trimmedEmail, hashedPassword, 'user']
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error("Erreur inscription :", err.message);
+    res.status(500).json({
+      error: "Erreur lors de l'inscription",
+      details: err.message
+    });
+  }
+});
+*/
+
+app.post('/api/login', async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email et mot de passe obligatoires" });
+  }
+
+  try {
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+
+    const result = await pool.query(
+      `SELECT id, full_name, email, role, password
+       FROM users
+       WHERE email = $1`,
+      [trimmedEmail]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: "Utilisateur introuvable" });
+    }
+
+    const user = result.rows[0];
+
+    const ok = await bcrypt.compare(trimmedPassword, user.password);
+
+    if (!ok) {
+      return res.status(401).json({ error: "Mot de passe incorrect" });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        full_name: user.full_name,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (err) {
+    console.error("Erreur login :", err.message);
+    res.status(500).json({ error: "Erreur serveur", details: err.message });
+  }
+});
+
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: "Token manquant" });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: "Token invalide" });
+    }
+
+    req.user = user;
+    next();
+  });
+}
+
+function authorizeRoles(...roles) {
+  return (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({ error: "Accès refusé" });
+    }
+    next();
+  };
+}
+app.get('/api/seed-admin', async (req, res) => {
+  try {
+    const existingAdmin = await pool.query(
+      'SELECT id FROM users WHERE email = $1',
+      ['sellahdyhia@gmail.com']
+    );
+
+    if (existingAdmin.rows.length > 0) {
+      return res.json({ message: "Admin déjà existant" });
+    }
+
+    const hashedPassword = await bcrypt.hash('admin123', 10);
+
+    const result = await pool.query(
+      `INSERT INTO users (full_name, email, password, role)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, full_name, email, role`,
+      ['Admin', 'sellahdyhia@gmail.com', hashedPassword, 'admin']
+    );
+
+    res.json({
+      message: "Compte admin créé",
+      admin: result.rows[0]
+    });
+  } catch (err) {
+    console.error("Erreur création admin :", err.message);
+    res.status(500).json({
+      error: "Erreur lors de la création de l'admin",
+      details: err.message
+    });
+  }
+});
+
+app.patch('/api/users/:id/role', async (req, res) => {
+  const { id } = req.params;
+  const { role } = req.body;
+
+  if (!['user', 'commercial', 'admin'].includes(role)) {
+    return res.status(400).json({
+      error: "Rôle invalide"
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE users
+       SET role = $1
+       WHERE id = $2
+       RETURNING id, full_name, email, role, created_at`,
+      [role, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: "Utilisateur introuvable"
+      });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Erreur mise à jour rôle :", err.message);
+    res.status(500).json({
+      error: "Erreur lors de la mise à jour du rôle",
+      details: err.message
+    });
+  }
+});
+
+app.get('/api/pipeline-board', async (req, res) => {
+  try {
+    const stagesResult = await pool.query(`
+      SELECT id, label, order_index
+      FROM pipeline_stages
+      ORDER BY order_index ASC
+    `);
+
+    const leadsResult = await pool.query(`
+      SELECT
+        l.id,
+        l.title,
+        l.amount,
+        l.status,
+        l.source,
+        l.stage_id,
+        l.created_at,
+        c.first_name,
+        c.last_name
+      FROM leads l
+      LEFT JOIN contacts c ON l.contact_id = c.id
+      ORDER BY l.created_at DESC
+    `);
+
+    const board = stagesResult.rows.map((stage) => ({
+      ...stage,
+      leads: leadsResult.rows.filter((lead) => Number(lead.stage_id) === Number(stage.id))
+    }));
+
+    res.json(board);
+  } catch (err) {
+    console.error("Erreur pipeline board :", err.message);
+    res.status(500).json({
+      error: "Erreur lors de la récupération du pipeline",
+      details: err.message
+    });
+  }
+});
+
+app.get('/api/stats/details', async (req, res) => {
+  try {
+    const [byStatus, bySource, byStage] = await Promise.all([
+      pool.query(`
+        SELECT
+          status,
+          COUNT(*) AS total,
+          COALESCE(SUM(amount), 0) AS amount
+        FROM leads
+        GROUP BY status
+        ORDER BY status
+      `),
+      pool.query(`
+        SELECT
+          COALESCE(source, 'Non renseignée') AS source,
+          COUNT(*) AS total
+        FROM leads
+        GROUP BY source
+        ORDER BY total DESC
+      `),
+      pool.query(`
+        SELECT
+          ps.id,
+          ps.label,
+          ps.order_index,
+          COUNT(l.id) AS total,
+          COALESCE(SUM(l.amount), 0) AS amount
+        FROM pipeline_stages ps
+        LEFT JOIN leads l ON l.stage_id = ps.id
+        GROUP BY ps.id, ps.label, ps.order_index
+        ORDER BY ps.order_index ASC
+      `)
+    ]);
+
+    res.json({
+      byStatus: byStatus.rows,
+      bySource: bySource.rows,
+      byStage: byStage.rows
+    });
+  } catch (err) {
+    console.error("Erreur stats details :", err.message);
+    res.status(500).json({
+      error: "Erreur lors de la récupération des statistiques détaillées",
+      details: err.message
+    });
+  }
+});
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
+
+const server = app.listen(PORT, () => {
   console.log(`🚀 Serveur SkillUp opérationnel sur le port ${PORT}`);
+});
+
+server.on("error", (err) => {
+  console.error("❌ Erreur serveur :", err);
+});
+
+server.on("close", () => {
+  console.log("⚠️ Le serveur a été fermé");
 });

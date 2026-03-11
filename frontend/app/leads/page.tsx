@@ -148,7 +148,10 @@ export default function LeadsPage() {
             <p>
               Contact : {lead.first_name ? `${lead.first_name} ${lead.last_name}` : "—"}
             </p>
-            <p>Étape : {lead.stage_label || "—"}</p>
+            {lead.stage_label && (
+              <p>Étape : {lead.stage_label}</p>
+            )}
+
           </div>
         ))}
       </div>
