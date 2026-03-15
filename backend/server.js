@@ -128,7 +128,18 @@ app.get('/api/leads', async (req, res) => {
 });
 
 app.post('/api/leads', async (req, res) => {
-  const { title, amount, contact_id, stage_id, status, source } = req.body;
+  const {
+    title,
+    amount,
+    contact_id,
+    stage_id,
+    status,
+    source,
+    probability,
+    assigned_user_id,
+    expected_close_date,
+    notes
+  } = req.body;
 
   if (!title || !contact_id) {
     return res.status(400).json({
@@ -137,19 +148,24 @@ app.post('/api/leads', async (req, res) => {
   }
 
   try {
-    const result = await pool.query(
-      `INSERT INTO leads (title, amount, contact_id, stage_id, status, source)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING *`,
-      [
-        title,
-        amount || 0,
-        contact_id,
-        stage_id || null,
-        status || 'nouveau',
-        source || null
-      ]
-    );
+const result = await pool.query(
+  `INSERT INTO leads
+   (title, amount, contact_id, stage_id, status, source, probability, assigned_user_id, expected_close_date, notes)
+   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+   RETURNING *`,
+  [
+    title,
+    amount || 0,
+    contact_id,
+    stage_id || null,
+    status || 'nouveau',
+    source || null,
+    probability || 50,
+    assigned_user_id || null,
+    expected_close_date || null,
+    notes || null
+  ]
+);
 
     // Brevo peut être remis plus tard si besoin
 await sendEmail(
@@ -179,35 +195,58 @@ app.get('/api/tasks', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT
-        t.*,
+        t.id,
+        t.lead_id,
+        t.title,
+        t.due_date,
+        t.is_completed,
+        t.priority,
         l.title AS lead_title
       FROM tasks t
       LEFT JOIN leads l ON t.lead_id = l.id
       ORDER BY t.id DESC
     `);
+
     res.json(result.rows);
   } catch (err) {
     console.error("Erreur récupération tâches :", err.message);
-    res.status(500).json({ error: "Erreur lors de la récupération des tâches", details: err.message });
+    res.status(500).json({
+      error: "Erreur lors de la récupération des tâches",
+      details: err.message
+    });
   }
 });
 
 app.post('/api/tasks', async (req, res) => {
-  const { lead_id, title, due_date } = req.body;
+  const { lead_id, title, due_date, priority } = req.body;
 
   if (!lead_id || !title) {
-    return res.status(400).json({ error: "Les champs lead_id et title sont obligatoires" });
+    return res.status(400).json({
+      error: "Les champs lead_id et title sont obligatoires"
+    });
   }
 
   try {
     const result = await pool.query(
-      'INSERT INTO tasks (lead_id, title, due_date) VALUES ($1, $2, $3) RETURNING *',
-      [lead_id, title, due_date || null]
+      `INSERT INTO tasks (lead_id, title, due_date, priority, is_completed)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [
+        lead_id,
+        title,
+        due_date || null,
+        priority || "moyenne",
+        false
+      ]
     );
+
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error("Erreur création tâche :", err.message);
-    res.status(500).json({ error: "Erreur lors de la création de la tâche", details: err.message });
+    res.status(500).json({
+      error: "Erreur lors de la création de la tâche",
+      details: err.message
+    });
   }
 });
 
@@ -235,30 +274,182 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
-app.get('/api/dashboard/stats', async (req, res) => {
+app.get('/api/dashboard', async (req, res) => {
   try {
-    const [leads, revenue, contacts, tasks, converted, lost] = await Promise.all([
-      pool.query('SELECT COUNT(*) FROM leads'),
-      pool.query('SELECT COALESCE(SUM(amount), 0) AS total FROM leads'),
-      pool.query('SELECT COUNT(*) FROM contacts'),
-      pool.query('SELECT COUNT(*) FROM tasks'),
-      pool.query("SELECT COUNT(*) FROM leads WHERE status = 'converti'"),
-      pool.query("SELECT COUNT(*) FROM leads WHERE status = 'perdu'")
+    const [
+      kpisResult,
+      pipelineResult,
+      sourceResult,
+      monthlyRevenueResult,
+      recentActivityResult,
+      topCommercialsResult,
+      tasksOverviewResult,
+      totalContactsResult,
+      totalCompaniesResult
+    ] = await Promise.all([
+      pool.query(`
+        SELECT
+          COALESCE(SUM(CASE WHEN status = 'converti' THEN amount ELSE 0 END), 0) AS total_revenue,
+          COUNT(*) AS total_leads,
+          COUNT(*) FILTER (WHERE status = 'converti') AS converted_leads,
+          COUNT(*) FILTER (WHERE status = 'en cours') AS active_leads
+        FROM leads
+      `),
+
+      pool.query(`
+        SELECT
+          ps.id,
+          ps.label,
+          ps.order_index,
+          COUNT(l.id) AS total,
+          COALESCE(SUM(l.amount), 0) AS amount
+        FROM pipeline_stages ps
+        LEFT JOIN leads l ON l.stage_id = ps.id
+        GROUP BY ps.id, ps.label, ps.order_index
+        ORDER BY ps.order_index ASC
+      `),
+
+      pool.query(`
+        SELECT
+          COALESCE(source, 'Non renseignée') AS source,
+          COUNT(*) AS total
+        FROM leads
+        GROUP BY source
+        ORDER BY total DESC
+      `),
+
+      pool.query(`
+        SELECT
+          TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') AS month_key,
+          TO_CHAR(DATE_TRUNC('month', created_at), 'Mon') AS month_label,
+          COALESCE(SUM(amount), 0) AS revenue
+        FROM leads
+        WHERE status = 'converti'
+        GROUP BY DATE_TRUNC('month', created_at)
+        ORDER BY DATE_TRUNC('month', created_at) ASC
+        LIMIT 12
+      `),
+
+      pool.query(`
+        (
+          SELECT
+            'lead' AS type,
+            l.id,
+            l.title AS label,
+            l.created_at,
+            CONCAT(COALESCE(c.first_name, ''), ' ', COALESCE(c.last_name, '')) AS meta
+          FROM leads l
+          LEFT JOIN contacts c ON l.contact_id = c.id
+        )
+        UNION ALL
+        (
+          SELECT
+            'task' AS type,
+            t.id,
+            t.title AS label,
+            COALESCE(t.created_at, t.due_date) AS created_at,
+            t.status AS meta
+          FROM tasks t
+        )
+        ORDER BY created_at DESC
+        LIMIT 8
+      `),
+
+      pool.query(`
+        SELECT
+          u.id,
+          u.full_name,
+          u.role,
+          COUNT(l.id) AS total_leads,
+          COALESCE(SUM(CASE WHEN l.status = 'converti' THEN l.amount ELSE 0 END), 0) AS revenue
+        FROM users u
+        LEFT JOIN leads l ON l.assigned_user_id = u.id
+        WHERE u.role IN ('commercial', 'admin')
+        GROUP BY u.id, u.full_name, u.role
+        ORDER BY revenue DESC, total_leads DESC, u.full_name ASC
+        LIMIT 5
+      `),
+
+      pool.query(`
+        SELECT
+          COUNT(*) AS total_tasks,
+          COUNT(*) FILTER (WHERE status = 'terminee') AS completed_tasks,
+          COUNT(*) FILTER (WHERE status IN ('nouvelle', 'en_attente', 'en_cours')) AS pending_tasks,
+          COUNT(*) FILTER (
+            WHERE due_date < NOW()
+            AND status != 'terminee'
+          ) AS overdue_tasks
+        FROM tasks
+      `),
+
+      pool.query(`
+        SELECT COUNT(*) AS total_contacts
+        FROM contacts
+      `),
+
+      pool.query(`
+        SELECT COUNT(*) AS total_companies
+        FROM companies
+      `)
     ]);
 
+    const kpis = kpisResult.rows[0];
+
+    const totalRevenue = Number(kpis.total_revenue || 0);
+    const totalLeads = Number(kpis.total_leads || 0);
+    const convertedLeads = Number(kpis.converted_leads || 0);
+    const activeLeads = Number(kpis.active_leads || 0);
+
+    const conversionRate =
+      totalLeads > 0 ? Number(((convertedLeads / totalLeads) * 100).toFixed(1)) : 0;
+
     res.json({
-      leads: parseInt(leads.rows[0].count),
-      revenue: parseFloat(revenue.rows[0].total),
-      contacts: parseInt(contacts.rows[0].count),
-      tasks: parseInt(tasks.rows[0].count),
-      converted: parseInt(converted.rows[0].count),
-      lost: parseInt(lost.rows[0].count)
+      success: true,
+      data: {
+        summary: {
+          totalRevenue,
+          totalLeads,
+          convertedLeads,
+          activeLeads,
+          conversionRate,
+          totalContacts: Number(totalContactsResult.rows[0].total_contacts || 0),
+          totalCompanies: Number(totalCompaniesResult.rows[0].total_companies || 0),
+          totalTasks: Number(tasksOverviewResult.rows[0].total_tasks || 0),
+          completedTasks: Number(tasksOverviewResult.rows[0].completed_tasks || 0),
+          pendingTasks: Number(tasksOverviewResult.rows[0].pending_tasks || 0),
+          overdueTasks: Number(tasksOverviewResult.rows[0].overdue_tasks || 0)
+        },
+        pipeline: pipelineResult.rows.map((row) => ({
+          id: row.id,
+          label: row.label,
+          order_index: Number(row.order_index),
+          total: Number(row.total),
+          amount: Number(row.amount)
+        })),
+        leadsBySource: sourceResult.rows.map((row) => ({
+          source: row.source,
+          total: Number(row.total)
+        })),
+        monthlyRevenue: monthlyRevenueResult.rows.map((row) => ({
+          monthKey: row.month_key,
+          monthLabel: row.month_label,
+          revenue: Number(row.revenue)
+        })),
+        recentActivity: recentActivityResult.rows,
+        topCommercials: topCommercialsResult.rows.map((row) => ({
+          id: row.id,
+          full_name: row.full_name,
+          role: row.role,
+          total_leads: Number(row.total_leads),
+          revenue: Number(row.revenue)
+        }))
+      }
     });
-  } catch (err) {
-    console.error("Erreur dashboard stats :", err.message);
+  } catch (error) {
+    console.error('Erreur dashboard:', error);
     res.status(500).json({
-      error: "Erreur lors du calcul des statistiques",
-      details: err.message
+      success: false,
+      message: 'Erreur lors de la récupération du dashboard'
     });
   }
 });
@@ -268,15 +459,83 @@ app.get('/api/dashboard/stats', async (req, res) => {
 ========================= */
 app.get('/api/users', async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT id, full_name, email, role, created_at FROM users ORDER BY created_at DESC'
-    );
-    res.json(result.rows);
-  } catch (err) {
-    console.error("Erreur récupération utilisateurs :", err.message);
+    const result = await pool.query(`
+      SELECT id, full_name, email, role, created_at
+      FROM users
+      ORDER BY id ASC
+    `);
+
+    res.json({
+      success: true,
+      users: result.rows
+    });
+  } catch (error) {
+    console.error('Erreur récupération utilisateurs :', error);
     res.status(500).json({
-      error: "Erreur lors de la récupération des utilisateurs",
-      details: err.message
+      success: false,
+      message: 'Erreur lors de la récupération des utilisateurs'
+    });
+  }
+});
+
+app.patch('/api/users/:id/role', async (req, res) => {
+  try {
+    const userId = Number(req.params.id);
+    const { role, requesterEmail } = req.body;
+
+    if (!['user', 'commercial'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rôle invalide'
+      });
+    }
+
+    if (requesterEmail !== 'sellahdyhia@gmail.com') {
+      return res.status(403).json({
+        success: false,
+        message: 'Accès refusé : seul l’admin peut modifier les rôles'
+      });
+    }
+
+    const userResult = await pool.query(
+      `SELECT id, email, role FROM users WHERE id = $1`,
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur introuvable'
+      });
+    }
+
+    const targetUser = userResult.rows[0];
+
+    if (targetUser.email === 'sellahdyhia@gmail.com') {
+      return res.status(400).json({
+        success: false,
+        message: 'Le compte admin principal ne peut pas être modifié'
+      });
+    }
+
+    const updated = await pool.query(
+      `UPDATE users
+       SET role = $1
+       WHERE id = $2
+       RETURNING id, full_name, email, role, created_at`,
+      [role, userId]
+    );
+
+    res.json({
+      success: true,
+      message: 'Rôle mis à jour avec succès',
+      user: updated.rows[0]
+    });
+  } catch (error) {
+    console.error('Erreur modification rôle :', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la modification du rôle'
     });
   }
 });
@@ -576,40 +835,6 @@ app.get('/api/seed-admin', async (req, res) => {
   }
 });
 
-app.patch('/api/users/:id/role', async (req, res) => {
-  const { id } = req.params;
-  const { role } = req.body;
-
-  if (!['user', 'commercial', 'admin'].includes(role)) {
-    return res.status(400).json({
-      error: "Rôle invalide"
-    });
-  }
-
-  try {
-    const result = await pool.query(
-      `UPDATE users
-       SET role = $1
-       WHERE id = $2
-       RETURNING id, full_name, email, role, created_at`,
-      [role, id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        error: "Utilisateur introuvable"
-      });
-    }
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error("Erreur mise à jour rôle :", err.message);
-    res.status(500).json({
-      error: "Erreur lors de la mise à jour du rôle",
-      details: err.message
-    });
-  }
-});
 
 app.get('/api/pipeline-board', async (req, res) => {
   try {
@@ -628,16 +853,26 @@ app.get('/api/pipeline-board', async (req, res) => {
         l.source,
         l.stage_id,
         l.created_at,
+        l.probability,
+        l.assigned_user_id,
+        l.expected_close_date,
+        l.notes,
         c.first_name,
-        c.last_name
+        c.last_name,
+        co.name AS company_name,
+        u.full_name AS assigned_user_name
       FROM leads l
       LEFT JOIN contacts c ON l.contact_id = c.id
+      LEFT JOIN companies co ON c.company_id = co.id
+      LEFT JOIN users u ON l.assigned_user_id = u.id
       ORDER BY l.created_at DESC
     `);
 
     const board = stagesResult.rows.map((stage) => ({
       ...stage,
-      leads: leadsResult.rows.filter((lead) => Number(lead.stage_id) === Number(stage.id))
+      leads: leadsResult.rows.filter(
+        (lead) => Number(lead.stage_id) === Number(stage.id)
+      ),
     }));
 
     res.json(board);
@@ -697,6 +932,412 @@ app.get('/api/stats/details', async (req, res) => {
     });
   }
 });
+
+app.patch('/api/tasks/:id/toggle', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const currentTask = await pool.query(
+      `SELECT id, is_completed, status
+       FROM tasks
+       WHERE id = $1`,
+      [id]
+    );
+
+    if (currentTask.rows.length === 0) {
+      return res.status(404).json({ error: "Tâche introuvable" });
+    }
+
+    const task = currentTask.rows[0];
+    const newCompleted = !task.is_completed;
+    const newStatus = newCompleted ? "terminee" : "en_attente";
+
+    const result = await pool.query(
+      `UPDATE tasks
+       SET is_completed = $1,
+           status = $2
+       WHERE id = $3
+       RETURNING
+         id,
+         lead_id,
+         title,
+         due_date,
+         is_completed,
+         status,
+         priority,
+         task_type,
+         assigned_user_id`,
+      [newCompleted, newStatus, id]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Erreur toggle tâche :", err.message);
+    res.status(500).json({
+      error: "Erreur lors de la mise à jour de la tâche",
+      details: err.message,
+    });
+  }
+});
+
+app.patch('/api/leads/:id/stage', async (req, res) => {
+  const { id } = req.params;
+  const { stage_id } = req.body;
+
+  if (!stage_id) {
+    return res.status(400).json({
+      error: "Le champ stage_id est obligatoire"
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE leads
+       SET stage_id = $1
+       WHERE id = $2
+       RETURNING *`,
+      [stage_id, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: "Lead introuvable"
+      });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Erreur mise à jour stage lead :", err.message);
+    res.status(500).json({
+      error: "Erreur lors du déplacement du lead",
+      details: err.message
+    });
+  }
+});
+app.patch('/api/companies/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, industry, city } = req.body;
+
+  try {
+    const result = await pool.query(
+      `UPDATE companies
+       SET name = $1,
+           industry = $2,
+           city = $3
+       WHERE id = $4
+       RETURNING *`,
+      [name, industry || null, city || null, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Entreprise introuvable" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Erreur modification entreprise :", err.message);
+    res.status(500).json({ error: "Erreur serveur", details: err.message });
+  }
+});
+
+app.delete('/api/companies/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `DELETE FROM companies
+       WHERE id = $1
+       RETURNING id`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Entreprise introuvable" });
+    }
+
+    res.json({ message: "Entreprise supprimée", id: Number(id) });
+  } catch (err) {
+    console.error("Erreur suppression entreprise :", err.message);
+    res.status(500).json({ error: "Erreur serveur", details: err.message });
+  }
+});
+
+app.patch('/api/companies/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, industry, city } = req.body;
+
+  try {
+    const result = await pool.query(
+      `UPDATE companies
+       SET name = $1,
+           industry = $2,
+           city = $3
+       WHERE id = $4
+       RETURNING *`,
+      [name, industry || null, city || null, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Entreprise introuvable" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Erreur modification entreprise :", err.message);
+    res.status(500).json({ error: "Erreur serveur", details: err.message });
+  }
+});
+
+app.delete('/api/companies/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `DELETE FROM companies
+       WHERE id = $1
+       RETURNING id`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Entreprise introuvable" });
+    }
+
+    res.json({ message: "Entreprise supprimée", id: Number(id) });
+  } catch (err) {
+    console.error("Erreur suppression entreprise :", err.message);
+    res.status(500).json({ error: "Erreur serveur", details: err.message });
+  }
+});
+
+app.patch('/api/leads/:id', async (req, res) => {
+  const { id } = req.params;
+  const {
+    title,
+    amount,
+    contact_id,
+    stage_id,
+    status,
+    source,
+    probability,
+    assigned_user_id,
+    expected_close_date,
+    notes
+  } = req.body;
+
+  try {
+    const result = await pool.query(
+      `UPDATE leads
+       SET title = $1,
+           amount = $2,
+           contact_id = $3,
+           stage_id = $4,
+           status = $5,
+           source = $6,
+           probability = $7,
+           assigned_user_id = $8,
+           expected_close_date = $9,
+           notes = $10
+       WHERE id = $11
+       RETURNING *`,
+      [
+        title,
+        amount || 0,
+        contact_id,
+        stage_id,
+        status,
+        source || null,
+        probability || 50,
+        assigned_user_id || null,
+        expected_close_date || null,
+        notes || null,
+        id
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Lead introuvable" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Erreur modification lead :", err.message);
+    res.status(500).json({ error: "Erreur serveur", details: err.message });
+  }
+});
+
+app.delete('/api/leads/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `DELETE FROM leads
+       WHERE id = $1
+       RETURNING id`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Lead introuvable" });
+    }
+
+    res.json({ message: "Lead supprimé", id: Number(id) });
+  } catch (err) {
+    console.error("Erreur suppression lead :", err.message);
+    res.status(500).json({ error: "Erreur serveur", details: err.message });
+  }
+});
+
+app.patch('/api/tasks/:id', async (req, res) => {
+  const { id } = req.params;
+  const {
+    title,
+    due_date,
+    priority,
+    status,
+    lead_id
+  } = req.body;
+
+  const is_completed = status === "terminee";
+
+  try {
+    const result = await pool.query(
+      `UPDATE tasks
+       SET title = $1,
+           due_date = $2,
+           priority = $3,
+           status = $4,
+           lead_id = $5,
+           is_completed = $6
+       WHERE id = $7
+       RETURNING *`,
+      [
+        title,
+        due_date || null,
+        priority || "moyenne",
+        status || "nouvelle",
+        lead_id,
+        is_completed,
+        id
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Tâche introuvable" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Erreur modification tâche :", err.message);
+    res.status(500).json({ error: "Erreur serveur", details: err.message });
+  }
+});
+
+app.delete('/api/tasks/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `DELETE FROM tasks
+       WHERE id = $1
+       RETURNING id`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Tâche introuvable" });
+    }
+
+    res.json({ message: "Tâche supprimée", id: Number(id) });
+  } catch (err) {
+    console.error("Erreur suppression tâche :", err.message);
+    res.status(500).json({ error: "Erreur serveur", details: err.message });
+  }
+});
+
+app.get('/api/users', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, full_name, email, role, created_at
+      FROM users
+      ORDER BY id ASC
+    `);
+
+    res.json({
+      success: true,
+      users: result.rows
+    });
+  } catch (error) {
+    console.error('Erreur récupération utilisateurs :', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération des utilisateurs'
+    });
+  }
+});
+
+app.patch('/api/users/:id/role', async (req, res) => {
+  try {
+    const userId = Number(req.params.id);
+    const { role, requesterEmail } = req.body;
+
+    if (!['user', 'commercial'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rôle invalide'
+      });
+    }
+
+    if (requesterEmail !== 'sellahdyhia@gmail.com') {
+      return res.status(403).json({
+        success: false,
+        message: 'Accès refusé : seul l’admin peut modifier les rôles'
+      });
+    }
+
+    const userResult = await pool.query(
+      `SELECT id, email, role FROM users WHERE id = $1`,
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur introuvable'
+      });
+    }
+
+    const targetUser = userResult.rows[0];
+
+    if (targetUser.email === 'sellahdyhia@gmail.com') {
+      return res.status(400).json({
+        success: false,
+        message: 'Le compte admin principal ne peut pas être modifié'
+      });
+    }
+
+    const updated = await pool.query(
+      `UPDATE users
+       SET role = $1
+       WHERE id = $2
+       RETURNING id, full_name, email, role`,
+      [role, userId]
+    );
+
+    res.json({
+      success: true,
+      message: 'Rôle mis à jour avec succès',
+      user: updated.rows[0]
+    });
+  } catch (error) {
+    console.error('Erreur modification rôle :', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la modification du rôle'
+    });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 
 const server = app.listen(PORT, () => {
@@ -710,3 +1351,4 @@ server.on("error", (err) => {
 server.on("close", () => {
   console.log("⚠️ Le serveur a été fermé");
 });
+

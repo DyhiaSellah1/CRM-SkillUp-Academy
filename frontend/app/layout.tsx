@@ -1,10 +1,5 @@
+import Sidebar from "./components/Sidebar";
 import "./globals.css";
-import Sidebar from "../components/Sidebar";
-
-export const metadata = {
-  title: "SkillUp CRM",
-  description: "CRM web moderne",
-};
 
 export default function RootLayout({
   children,
@@ -13,10 +8,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fr">
-      <body className="bg-slate-100 text-slate-900">
-        <div className="flex min-h-screen">
+      <body className="bg-[#f6f8fc]">
+        <div className="flex min-h-screen items-stretch">
           <Sidebar />
-          <main className="flex-1 p-8">{children}</main>
+          <main className="flex-1 min-h-screen overflow-x-hidden">
+            {children}
+          </main>
         </div>
       </body>
     </html>
