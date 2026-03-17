@@ -15,6 +15,7 @@ export default function LoginPage() {
         e.preventDefault();
 
         try {
+            console.log(process.env.NEXT_PUBLIC_API_URL);
             const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/login`, {
                 method: "POST",
                 headers: {
