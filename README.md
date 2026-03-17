@@ -1,486 +1,86 @@
-# SkillUp CRM – Plateforme de gestion de la relation client
+🚀 SkillUp CRM — Plateforme de Gestion de Formation
 
-## 1. Présentation du projet
+Next.js 14 | Node.js | PostgreSQL | Brevo
 
-SkillUp CRM est une application web développée dans le cadre d’un projet de formation en communication digitale et développement web.
+SkillUp CRM est une solution FullStack conçue pour digitaliser et centraliser la gestion commerciale de SkillUp Academy. L'objectif est de transformer des processus manuels en une plateforme fluide permettant de piloter le cycle de vente, de la détection du prospect à la conversion finale.
 
-Le projet consiste à concevoir et développer un **CRM (Customer Relationship Management)** permettant à une entreprise de :
+🔗 Lien du projet en ligne : https://crm-skill-up-academy.vercel.app
 
-- centraliser les données clients
-- suivre les opportunités commerciales
-- analyser les performances marketing
-- automatiser certaines communications
+🏢 Contexte & Entreprise Cible
 
-L’application adopte une **architecture SaaS moderne**, utilisant des technologies cloud et des APIs externes.
+SkillUp Academy est un organisme de formation professionnelle proposant des programmes de formation destinés aux entreprises et aux particuliers.
+    Centraliser les données clients (Contacts & Entreprises).
 
----
+    Tracer chaque interaction pour éviter les pertes d'informations.
 
-# 2. Contexte métier
+    Automatiser les relances et le marketing via l'envoi d'emails.
 
-Les entreprises utilisent des CRM pour améliorer leur relation client et optimiser leurs ventes.
+    Piloter l'activité grâce à une vue d'ensemble (Dashboard & Pipeline).
 
-Un CRM permet notamment de :
+✨ Fonctionnalités Clés
 
-- suivre les prospects
-- organiser les actions commerciales
-- analyser les performances
-- centraliser les données clients
+    📊 Tableau de Bord : Visualisation en temps réel des KPIs (nombre de leads, CA potentiel, tâches en cours).
 
-Dans ce projet, l’entreprise fictive **SkillUp Academy** souhaite mettre en place un CRM pour améliorer :
+    📈 Pipeline Commercial : Suivi dynamique des opportunités à travers 7 étapes clés (Nouveau, Qualification, Proposition, etc.).
 
-- le suivi des prospects
-- la gestion des contacts
-- le pilotage des campagnes marketing
-- la visualisation des performances commerciales
+    👥 Gestion CRM 360° : Modules dédiés pour les Leads, Contacts et Entreprises avec gestion des relations.
 
----
+    📅 Organisation des Tâches : Planification des appels, rendez-vous et relances liés aux opportunités.
 
-# 3. Objectifs du projet
+    📣 Marketing Automation : Intégration de l'API Brevo pour les notifications et campagnes d'emails.
 
-Les objectifs du projet sont :
+    🛡️ Gestion des Rôles : Accès différenciés pour les Commerciaux et les Administrateurs.
 
-- concevoir une application web full-stack
-- mettre en place une base de données relationnelle
-- développer une interface utilisateur moderne
-- implémenter une API REST
-- intégrer un service d’emailing
-- visualiser les données via des dashboards
+🛠️ Stack Technique
 
----
+    Frontend : Next.js 14 (App Router), React, Tailwind CSS, TypeScript.
 
-# 4. Technologies utilisées
+    Backend : Node.js, Express.js.
 
-## Frontend
+    Base de Données : PostgreSQL Neon/Supabase.
 
-- React
-- Next.js
-- Tailwind CSS
-- TypeScript
+    Services Cloud : Brevo (Emails), Vercel (Hébergement), GitHub (CI/CD).
 
-Le frontend gère :
+    DevOps : Docker & Docker Compose pour l'environnement local.
 
-- l’interface utilisateur
-- la navigation entre les pages
-- la communication avec l’API backend
+📂 Structure du Dépôt
 
----
+Plaintext
 
-## Backend
-
-- Node.js
-- Express.js
-
-Le backend fournit :
-
-- les APIs REST
-- la logique métier
-- la gestion des utilisateurs
-- la connexion à la base de données
-
----
-
-## Base de données
-
-- PostgreSQL
-
-La base stocke :
-
-- utilisateurs
-- entreprises
-- contacts
-- leads
-- pipeline
-- tâches
-
----
-
-## Services externes
-
-- **Brevo** : envoi d’emails automatiques
-- **GitHub** : gestion du code
-- **Vercel** : déploiement
-- **Supabase / Neon** : base de données cloud
-
----
-
-# 5. Architecture du système
-
-Architecture générale :
-Frontend (Next.js)
-↓
-API REST
-↓
-Backend (Node.js / Express)
-↓
-Base de données PostgreSQL
-
-Communication :
-
-
-Frontend → API REST → Backend → PostgreSQL
-
-
-Services externes :
-
-
-Backend → Brevo → Email utilisateur
-
----
-
-# 6. Structure du projet
 SkillUp CRM
-│
-├── backend
-│ ├── server.js
-│ ├── src
-│ │ └── mail
-│ │ └── mailservice.js
-│ └── package.json
-│
-├── frontend
-│ ├── app
-│ │ ├── dashboard
-│ │ ├── contacts
-│ │ ├── companies
-│ │ ├── leads
-│ │ ├── tasks
-│ │ ├── pipeline
-│ │ ├── stats
-│ │ ├── login
-│ │ └── register
-│ │
-│ └── components
-│ └── Sidebar.tsx
-│
-├── diagrams
-│ ├── usecase-crm.puml
-│ ├── class-crm.puml
-│ ├── er-crm.mmd
-│ └── workflow-crm.mmd
-│
+├── backend          # API REST & Logique métier (Node.js)
+├── frontend         # Interface utilisateur (Next.js)
+├── diagrams         # Modélisation (Use Case, Classe, ER)
+├── docker-compose.yml
 └── README.md
 
+🚀 Installation et Lancement Rapide
 
----
+1. Cloner le projet
 
-# 7. Gestion des utilisateurs
+Bash
 
-Le système comporte trois rôles :
+git clone https://github.com/DyhiaSellah1/CRM-SkillUp-Academy.git
+cd CRM-SkillUp-Academy
 
-### User
-Accès limité :
+2. Lancer avec Docker
 
-- consulter certaines informations
-- accéder à son espace utilisateur
+Bash
 
-### Commercial
+docker-compose up --build
 
-Le commercial gère la relation client :
+Accès : Frontend (3000) | Backend (3001)
 
-- création de contacts
-- gestion des entreprises
-- suivi des leads
-- création de tâches
+3. Lancement manuel
 
-### Admin
+   Backend : cd backend && npm install && npm run dev
 
-L’administrateur supervise la plateforme :
+   Frontend : cd frontend && npm install && npm run dev
 
-- gestion des utilisateurs
-- attribution des rôles
-- accès au dashboard global
-- gestion du pipeline
+📚 Documentation & Rapport
 
----
+Le rapport de projet complet, incluant l'analyse détaillée, les diagrammes UML et les choix d'architecture, est disponible ici :
 
-# 8. Gestion des contacts
+👉 Télécharger le Rapport - SkillUp Academy
 
-Un contact représente une personne associée à une entreprise.
-
-Informations stockées :
-
-- prénom
-- nom
-- email
-- entreprise
-
-Fonctionnalités :
-
-- création
-- consultation
-- association à une entreprise
-
----
-
-# 9. Gestion des entreprises
-
-Une entreprise peut contenir plusieurs contacts.
-
-Exemples d’informations :
-
-- nom
-- secteur d’activité
-- ville
-
-Relation :
-Entreprise → Contacts
-
-
----
-
-# 10. Gestion des leads
-
-Un **lead** représente une opportunité commerciale.
-
-Informations stockées :
-
-- titre
-- montant potentiel
-- contact associé
-- source
-- statut
-- étape du pipeline
-
-Statuts possibles :
-
-- nouveau
-- en cours
-- converti
-- perdu
-
----
-
-# 11. Pipeline commercial
-
-Le pipeline représente le cycle de vente.
-
-Étapes configurées :
-
-1. Nouveau lead
-2. Qualification
-3. Rendez-vous planifié
-4. Proposition envoyée
-5. Négociation
-6. Gagné
-7. Perdu
-
-Chaque lead est affiché dans la colonne correspondant à son étape.
-
-Le pipeline permet :
-
-- visualisation des opportunités
-- suivi du cycle de vente
-- analyse du funnel commercial
-
----
-
-# 12. Gestion des tâches
-
-Les tâches permettent d’organiser les actions commerciales.
-
-Exemples :
-
-- appel prospect
-- rendez-vous client
-- relance email
-- préparation de proposition
-
-Chaque tâche est liée à un lead.
-
----
-
-# 13. Dashboard et statistiques
-
-Le dashboard permet de visualiser les indicateurs clés.
-
-Indicateurs affichés :
-
-- nombre de leads
-- chiffre d’affaires potentiel
-- nombre de contacts
-- nombre de tâches
-
-Statistiques détaillées :
-
-- leads par statut
-- leads par source
-- leads par étape du pipeline
-
----
-
-# 14. Modélisation des données
-
-Tables principales :
-
----
-
-# 10. Gestion des leads
-
-Un **lead** représente une opportunité commerciale.
-
-Informations stockées :
-
-- titre
-- montant potentiel
-- contact associé
-- source
-- statut
-- étape du pipeline
-
-Statuts possibles :
-
-- nouveau
-- en cours
-- converti
-- perdu
-
----
-
-# 11. Pipeline commercial
-
-Le pipeline représente le cycle de vente.
-
-Étapes configurées :
-
-1. Nouveau lead
-2. Qualification
-3. Rendez-vous planifié
-4. Proposition envoyée
-5. Négociation
-6. Gagné
-7. Perdu
-
-Chaque lead est affiché dans la colonne correspondant à son étape.
-
-Le pipeline permet :
-
-- visualisation des opportunités
-- suivi du cycle de vente
-- analyse du funnel commercial
-
----
-
-# 12. Gestion des tâches
-
-Les tâches permettent d’organiser les actions commerciales.
-
-Exemples :
-
-- appel prospect
-- rendez-vous client
-- relance email
-- préparation de proposition
-
-Chaque tâche est liée à un lead.
-
----
-
-# 13. Dashboard et statistiques
-
-Le dashboard permet de visualiser les indicateurs clés.
-
-Indicateurs affichés :
-
-- nombre de leads
-- chiffre d’affaires potentiel
-- nombre de contacts
-- nombre de tâches
-
-Statistiques détaillées :
-
-- leads par statut
-- leads par source
-- leads par étape du pipeline
-
----
-
-# 14. Modélisation des données
-
-Tables principales :
-users
-companies
-contacts
-pipeline_stages
-leads
-tasks
-Relations :
-
----
-
-# 17. Envoi d’emails
-
-Le CRM utilise **Brevo** pour envoyer des emails automatiques.
-
-Exemples d’usage :
-
-- notification de création de lead
-- communication marketing
-- suivi commercial
-
----
-
-# 18. Déploiement
-
-Le projet peut être déployé sur :
-
-Frontend :
-
-
-Vercel
-
-
-Backend :
-
-
-Railway
-Render
-Vercel serverless
-
-
-Base de données :
-
-
-Supabase
-Neon
-
-
----
-
-
-## Diagrammes du projet
-
-### Diagramme de cas d'utilisation (Use Case)
-
-Ce diagramme présente les interactions entre les différents types d’utilisateurs du CRM et les fonctionnalités principales de l’application.
-
-![Use Case Diagram](diagram/usecase.png)
-
----
-
-### Diagramme de la base de données (ER Diagram)
-
-Ce diagramme représente la structure de la base de données du CRM ainsi que les relations entre les différentes entités.
-
-![ER Diagram](diagram/class_crm.png)
-
----
-
-# 20. Améliorations futures
-
-Fonctionnalités possibles :
-
-- drag & drop dans le pipeline
-- segmentation marketing
-- intégration CRM avec réseaux sociaux
-- automatisation marketing avancée
-- reporting avancé
-
----
-
-# Auteur
-
-Projet réalisé par :
-
-Dyhia Sellah
-
-Projet académique – CRM SaaS.
+Réalisé par Dyhia Sellah — Projet Académique CRM SaaS

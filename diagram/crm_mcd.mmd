@@ -1,0 +1,93 @@
+erDiagram
+
+    USERS {
+        int id
+        text full_name
+        text email
+        text password
+        text role
+        timestamp created_at
+    }
+
+    COMPANIES {
+        int id
+        text name
+        text industry
+        text city
+        timestamp created_at
+    }
+
+    CONTACTS {
+        int id
+        text first_name
+        text last_name
+        text email
+        int company_id
+        int assigned_user_id
+        timestamp created_at
+    }
+
+    PIPELINE_STAGES {
+        int id
+        text label
+        int order_index
+        text code
+        text color
+    }
+
+    LEADS {
+        int id
+        text title
+        decimal amount
+        int contact_id
+        int stage_id
+        int company_id
+        int assigned_user_id
+        text status
+        text source
+        int probability
+        date expected_close_date
+        text notes
+        timestamp created_at
+    }
+
+    TASKS {
+        int id
+        int lead_id
+        int contact_id
+        int company_id
+        int assigned_user_id
+        text title
+        text description
+        timestamp due_date
+        boolean is_completed
+        text status
+        text priority
+        text task_type
+        timestamp completed_at
+        timestamp created_at
+    }
+
+    PIPELINE_DEALS {
+        int id
+        int lead_id
+        int stage_id
+        timestamp entered_stage_at
+        timestamp created_at
+    }
+
+    COMPANIES ||--o{ CONTACTS : possede
+    USERS ||--o{ CONTACTS : assigne
+
+    CONTACTS ||--o{ LEADS : genere
+    COMPANIES ||--o{ LEADS : concerne
+    PIPELINE_STAGES ||--o{ LEADS : etape
+    USERS ||--o{ LEADS : gere
+
+    LEADS ||--o{ TASKS : contient
+    CONTACTS ||--o{ TASKS : lie
+    COMPANIES ||--o{ TASKS : lie
+    USERS ||--o{ TASKS : assigne
+
+    LEADS ||--|| PIPELINE_DEALS : historique
+    PIPELINE_STAGES ||--o{ PIPELINE_DEALS : etape
