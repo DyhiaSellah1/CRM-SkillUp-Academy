@@ -4,7 +4,7 @@ Next.js 14 | Node.js | PostgreSQL | Brevo
 
 SkillUp CRM est une solution FullStack conçue pour digitaliser et centraliser la gestion commerciale de SkillUp Academy. L'objectif est de transformer des processus manuels en une plateforme fluide permettant de piloter le cycle de vente, de la détection du prospect à la conversion finale.
 
-🔗 Lien du projet en ligne : https://crm-skill-up-academy.vercel.app
+🔗 Lien du projet en ligne : https://crm-skill-up-academyfront-gnykoa63t-dyhiasellah1s-projects.vercel.app/login
 
 🏢 Contexte & Entreprise Cible
 
