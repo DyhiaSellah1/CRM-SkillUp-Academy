@@ -37,18 +37,22 @@ export default function Sidebar() {
   const [mounted, setMounted] = useState(false);
   const [user, setUser] = useState<UserType>({});
 
-  useEffect(() => {
-    setMounted(true);
+useEffect(() => {
+  setMounted(true);
 
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (error) {
-        console.error("Erreur lecture user :", error);
-      }
-    }
-  }, []);
+  const storedUser = localStorage.getItem("user");
+
+  if (!storedUser) return;
+
+  try {
+    const parsedUser = JSON.parse(storedUser);
+    setUser(parsedUser);
+  } catch (error) {
+    console.error("Erreur lecture user :", error);
+    localStorage.removeItem("user");
+    localStorage.removeItem("token");
+  }
+}, []);
 
   const handleLogout = () => {
     localStorage.removeItem("token");

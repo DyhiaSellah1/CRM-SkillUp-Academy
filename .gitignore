@@ -6,5 +6,5 @@ build
 *.log
 .idea
 frontend/.env.local
-frontend/app/.env.local
+frontend/.env.local
 backend/.env

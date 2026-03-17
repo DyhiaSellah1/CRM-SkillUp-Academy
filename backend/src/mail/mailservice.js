@@ -1,41 +1,34 @@
-const brevo = require('@getbrevo/brevo');
-require('dotenv').config();
+const nodemailer = require("nodemailer");
+require("dotenv").config();
 
-async function sendEmail(to, subject, htmlContent) {
-   console.log('sendEmail');
+const transporter = nodemailer.createTransport({
+  host: process.env.BREVO_SMTP_HOST,
+  port: Number(process.env.BREVO_SMTP_PORT || 587),
+  secure: false,
+  auth: {
+    user: process.env.BREVO_SMTP_USER,
+    pass: process.env.BREVO_SMTP_PASS,
+  },
+  tls: {
+    rejectUnauthorized: false,
+  },
+});
+
+async function sendEmail(to, subject, html) {
   try {
+    const info = await transporter.sendMail({
+      from: `"${process.env.BREVO_SENDER_NAME || "SkillUp CRM"}" <${process.env.BREVO_SENDER_EMAIL}>`,
+      to,
+      subject,
+      html,
+    });
 
-    const apiInstance = new brevo.TransactionalEmailsApi();
-
-    apiInstance.setApiKey(
-      brevo.TransactionalEmailsApiApiKeys.apiKey,
-      process.env.BREVO_API_KEY
-    );
-
-    const sendSmtpEmail = new brevo.SendSmtpEmail();
-
-    sendSmtpEmail.subject = subject;
-    sendSmtpEmail.htmlContent = htmlContent;
-
-    sendSmtpEmail.sender = {
-      name: process.env.BREVO_SENDER_NAME,
-      email: process.env.BREVO_SENDER_EMAIL
-    };
-
-    sendSmtpEmail.to = [
-      { email: to }
-    ];
-
-    const data = await apiInstance.sendTransacEmail(sendSmtpEmail);
-
-    console.log("Email envoyé :", data);
-
+    console.log("Email envoyé :", info.messageId);
+    return info;
   } catch (error) {
-
-    console.error("Erreur Brevo :", error.message);
-
+    console.error("Erreur envoi email :", error);
+    throw error;
   }
-
 }
 
 module.exports = { sendEmail };

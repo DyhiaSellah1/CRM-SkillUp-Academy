@@ -1,12 +1,20 @@
-import Sidebar from "./components/Sidebar";
 import "./globals.css";
+import AppShell from "./components/AppShell";
 
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (
+      return (
+        <html lang="fr">
+          <body>
+            <AppShell>{children}</AppShell>
+          </body>
+        </html>
+      );
+    }
+/*  return (
     <html lang="fr">
       <body className="bg-[#f6f8fc]">
         <div className="flex min-h-screen items-stretch">
@@ -18,4 +26,4 @@ export default function RootLayout({
       </body>
     </html>
   );
-}
+}*/

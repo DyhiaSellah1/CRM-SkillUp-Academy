@@ -15,7 +15,10 @@ const pool = new Pool({
   },
 });
 
-app.use(cors());
+app.use(cors({
+    origin: process.env.FRONTEND_URL,
+    credentials: true,
+}));
 app.use(express.json());
 
 /* =========================
@@ -48,23 +51,131 @@ app.get('/api/contacts', async (req, res) => {
 
 app.post('/api/contacts', async (req, res) => {
   const { first_name, last_name, email, company_id } = req.body;
-   // console.log("contact");
-    //console.log(req);
+
   if (!first_name || !last_name || !email) {
     return res.status(400).json({ error: "Tous les champs sont obligatoires" });
   }
 
   try {
     const result = await pool.query(
-      'INSERT INTO contacts (first_name, last_name, email, company_id) VALUES ($1, $2, $3, $4) RETURNING *',
+      `INSERT INTO contacts (first_name, last_name, email, company_id)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
       [first_name, last_name, email, company_id || null]
     );
-    res.status(201).json(result.rows[0]);
+
+    try {
+      await sendEmail(
+        email,
+        "Bienvenue chez SkillUp CRM",
+        `
+          <h2>Bienvenue ${first_name} ${last_name}</h2>
+          <p>Votre contact a bien été enregistré dans notre CRM SkillUp.</p>
+          <p>Nous vous recontacterons prochainement.</p>
+        `
+      );
+
+      await sendEmail(
+        "dihiasellah1@gmail.com",
+        "Nouveau contact créé",
+        `
+          <h2>Nouveau contact créé</h2>
+          <p><b>Nom :</b> ${first_name} ${last_name}</p>
+          <p><b>Email :</b> ${email}</p>
+          <p><b>Company ID :</b> ${company_id || "Non renseignée"}</p>
+        `
+      );
+    } catch (mailError) {
+      console.error("Erreur email contact :", mailError.message);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "Contact créé avec succès",
+      contact: result.rows[0]
+    });
   } catch (err) {
     console.error("Erreur création contact :", err.message);
-    res.status(500).json({ error: "Erreur lors de la création du contact", details: err.message });
+    res.status(500).json({
+      success: false,
+      error: "Erreur lors de la création du contact",
+      details: err.message
+    });
   }
 });
+
+app.patch('/api/contacts/:id', async (req, res) => {
+  const { id } = req.params;
+  const { first_name, last_name, email, company_id } = req.body;
+
+  if (!first_name || !last_name || !email) {
+    return res.status(400).json({
+      error: "Les champs first_name, last_name et email sont obligatoires"
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE contacts
+       SET first_name = $1,
+           last_name = $2,
+           email = $3,
+           company_id = $4
+       WHERE id = $5
+       RETURNING *`,
+      [first_name, last_name, email, company_id || null, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Contact introuvable" });
+    }
+
+    res.json({
+      success: true,
+      message: "Contact modifié avec succès",
+      contact: result.rows[0]
+    });
+  } catch (err) {
+    console.error("Erreur modification contact :", err.message);
+    res.status(500).json({
+      success: false,
+      error: "Erreur lors de la modification du contact",
+      details: err.message
+    });
+  }
+});
+
+
+app.delete('/api/contacts/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `DELETE FROM contacts
+       WHERE id = $1
+       RETURNING id`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Contact introuvable" });
+    }
+
+    res.json({
+      success: true,
+      message: "Contact supprimé avec succès",
+      id: Number(id)
+    });
+  } catch (err) {
+    console.error("Erreur suppression contact :", err.message);
+    res.status(500).json({
+      success: false,
+      error: "Erreur lors de la suppression du contact",
+      details: err.message
+    });
+  }
+});
+
 
 /* =========================
    3. ENTREPRISES
@@ -166,7 +277,44 @@ const result = await pool.query(
     notes || null
   ]
 );
+try {
+  await sendEmail(
+    "dihiasellah1@gmail.com",
+    "Nouveau lead créé",
+    `
+      <h2>Nouveau lead créé</h2>
+      <p><b>Titre :</b> ${title}</p>
+      <p><b>Montant :</b> ${amount || 0} €</p>
+      <p><b>Source :</b> ${source || "Non renseignée"}</p>
+      <p><b>Contact ID :</b> ${contact_id}</p>
+    `
+  );
+} catch (mailError) {
+  console.error("Erreur email admin lead :", mailError.message);
+}
+if (assigned_user_id) {
+  const assignedUserResult = await pool.query(
+    `SELECT full_name, email FROM users WHERE id = $1`,
+    [assigned_user_id]
+  );
 
+  if (assignedUserResult.rows.length > 0) {
+    const assignedUser = assignedUserResult.rows[0];
+
+    await sendEmail(
+      assignedUser.email,
+      "Nouveau lead assigné",
+      `
+        <h2>Bonjour ${assignedUser.full_name}</h2>
+        <p>Un nouveau lead vous a été assigné.</p>
+        <p><b>Titre :</b> ${title}</p>
+        <p><b>Montant :</b> ${amount || 0} €</p>
+        <p><b>Source :</b> ${source || "Non renseignée"}</p>
+      `
+    );
+  }
+}
+/*
     // Brevo peut être remis plus tard si besoin
 await sendEmail(
   "dihiasellah1@gmail.com",
@@ -177,7 +325,7 @@ await sendEmail(
    <p><b>Montant :</b> ${amount} €</p>
    <p><b>Source :</b> ${source || "Non renseignée"}</p>`
 );
-
+*/
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error("Erreur création lead :", err.message);
@@ -217,8 +365,9 @@ app.get('/api/tasks', async (req, res) => {
   }
 });
 
+
 app.post('/api/tasks', async (req, res) => {
-  const { lead_id, title, due_date, priority } = req.body;
+  const { lead_id, title, due_date, priority, assigned_user_id } = req.body;
 
   if (!lead_id || !title) {
     return res.status(400).json({
@@ -228,19 +377,72 @@ app.post('/api/tasks', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `INSERT INTO tasks (lead_id, title, due_date, priority, is_completed)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO tasks (lead_id, title, due_date, priority, is_completed, assigned_user_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
       [
         lead_id,
         title,
         due_date || null,
         priority || "moyenne",
-        false
+        false,
+        assigned_user_id || null
       ]
     );
 
-    res.status(201).json(result.rows[0]);
+    const newTask = result.rows[0];
+
+    // 1) Mail admin systématique
+    try {
+      await sendEmail(
+        "dihiasellah1@gmail.com",
+        "Nouvelle tâche créée",
+        `
+          <h2>Nouvelle tâche créée</h2>
+          <p><b>Titre :</b> ${title}</p>
+          <p><b>Lead ID :</b> ${lead_id}</p>
+          <p><b>Date d’échéance :</b> ${due_date || "Non définie"}</p>
+          <p><b>Priorité :</b> ${priority || "moyenne"}</p>
+          <p><b>Assigned user id :</b> ${assigned_user_id || "Aucun"}</p>
+        `
+      );
+      console.log("Mail admin tâche envoyé");
+    } catch (mailError) {
+      console.error("Erreur email admin tâche :", mailError.message);
+    }
+
+    // 2) Mail à l’utilisateur assigné si présent
+    if (assigned_user_id) {
+      try {
+        const assignedUserResult = await pool.query(
+          `SELECT full_name, email FROM users WHERE id = $1`,
+          [assigned_user_id]
+        );
+
+        if (assignedUserResult.rows.length > 0) {
+          const assignedUser = assignedUserResult.rows[0];
+
+          await sendEmail(
+            assignedUser.email,
+            "Nouvelle tâche assignée",
+            `
+              <h2>Bonjour ${assignedUser.full_name}</h2>
+              <p>Une nouvelle tâche vous a été assignée.</p>
+              <p><b>Tâche :</b> ${title}</p>
+              <p><b>Date d’échéance :</b> ${due_date || "Non définie"}</p>
+            `
+          );
+
+          console.log("Mail utilisateur assigné envoyé");
+        } else {
+          console.log("Aucun utilisateur trouvé pour assigned_user_id =", assigned_user_id);
+        }
+      } catch (mailError) {
+        console.error("Erreur email utilisateur tâche :", mailError.message);
+      }
+    }
+
+    res.status(201).json(newTask);
   } catch (err) {
     console.error("Erreur création tâche :", err.message);
     res.status(500).json({
@@ -616,21 +818,27 @@ app.post('/api/pipeline-stages', async (req, res) => {
 
 app.get('/api/test-email', async (req, res) => {
   try {
-
-    await sendEmail(
+    const info = await sendEmail(
       "dihiasellah1@gmail.com",
       "Test Brevo SkillUp CRM",
       "<h2>Email test</h2><p>Brevo fonctionne correctement.</p>"
     );
 
-    res.json({ message: "Email envoyé" });
-
+    res.json({
+      message: "Email envoyé",
+      messageId: info.messageId,
+      accepted: info.accepted,
+      rejected: info.rejected,
+      response: info.response,
+    });
   } catch (error) {
+    console.error("Erreur test email :", error);
 
-    res.status(500).json({ error: "Erreur envoi email" });
-
+    res.status(500).json({
+      error: "Erreur envoi email",
+      details: error.message,
+    });
   }
-
 });
 
 app.post('/api/register', async (req, res) => {
@@ -1005,6 +1213,34 @@ app.patch('/api/leads/:id/stage', async (req, res) => {
       });
     }
 
+    const lead = result.rows[0];
+
+    const stageResult = await pool.query(
+      `SELECT label FROM pipeline_stages WHERE id = $1`,
+      [stage_id]
+    );
+
+    const assignedUserResult = await pool.query(
+      `SELECT full_name, email FROM users WHERE id = $1`,
+      [lead.assigned_user_id]
+    );
+
+    const stageLabel = stageResult.rows[0]?.label || "Étape inconnue";
+
+    if (assignedUserResult.rows.length > 0) {
+      const assignedUser = assignedUserResult.rows[0];
+
+      await sendEmail(
+        assignedUser.email,
+        "Mise à jour du pipeline",
+        `
+          <h2>Bonjour ${assignedUser.full_name}</h2>
+          <p>Le lead <b>${lead.title}</b> a été déplacé dans le pipeline.</p>
+          <p><b>Nouvelle étape :</b> ${stageLabel}</p>
+        `
+      );
+    }
+
     res.json(result.rows[0]);
   } catch (err) {
     console.error("Erreur mise à jour stage lead :", err.message);
@@ -1014,6 +1250,7 @@ app.patch('/api/leads/:id/stage', async (req, res) => {
     });
   }
 });
+
 app.patch('/api/companies/:id', async (req, res) => {
   const { id } = req.params;
   const { name, industry, city } = req.body;
@@ -1157,6 +1394,42 @@ app.patch('/api/leads/:id', async (req, res) => {
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Lead introuvable" });
+    }
+    const updatedLead = result.rows[0];
+
+    if (updatedLead.assigned_user_id && (updatedLead.status === "converti" || updatedLead.status === "perdu")) {
+      const assignedUserResult = await pool.query(
+        `SELECT full_name, email FROM users WHERE id = $1`,
+        [updatedLead.assigned_user_id]
+      );
+
+      if (assignedUserResult.rows.length > 0) {
+        const assignedUser = assignedUserResult.rows[0];
+
+        if (updatedLead.status === "converti") {
+          await sendEmail(
+            assignedUser.email,
+            "Lead gagné 🎉",
+            `
+              <h2>Bravo ${assignedUser.full_name}</h2>
+              <p>Le lead <b>${updatedLead.title}</b> a été marqué comme gagné.</p>
+              <p><b>Montant :</b> ${updatedLead.amount || 0} €</p>
+            `
+          );
+        }
+
+        if (updatedLead.status === "perdu") {
+          await sendEmail(
+            assignedUser.email,
+            "Lead perdu",
+            `
+              <h2>Bonjour ${assignedUser.full_name}</h2>
+              <p>Le lead <b>${updatedLead.title}</b> a été marqué comme perdu.</p>
+              <p>Vous pouvez consulter le CRM pour plus de détails.</p>
+            `
+          );
+        }
+      }
     }
 
     res.json(result.rows[0]);

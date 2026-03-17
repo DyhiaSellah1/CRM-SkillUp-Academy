@@ -73,12 +73,20 @@ export default function SettingsPage() {
 
   const isMainAdmin = currentUser?.email === "sellahdyhia@gmail.com";
 
-  useEffect(() => {
-    const savedUser = localStorage.getItem("user");
-    if (savedUser) {
-      setCurrentUser(JSON.parse(savedUser));
-    }
-  }, []);
+useEffect(() => {
+  const savedUser = localStorage.getItem("user");
+
+  if (!savedUser) return;
+
+  try {
+    const parsedUser = JSON.parse(savedUser);
+    setCurrentUser(parsedUser);
+  } catch (error) {
+    console.error("Erreur lecture currentUser :", error);
+    localStorage.removeItem("user");
+    localStorage.removeItem("token");
+  }
+}, []);
 
 useEffect(() => {
   const fetchUsers = async () => {
